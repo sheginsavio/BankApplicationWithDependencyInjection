@@ -1,0 +1,47 @@
+﻿using Bank_Application.Data;
+using Bank_Application.Models;
+using Bank_Application.Services.Interfaces;
+
+namespace Bank_Application.Services.Implementations
+{
+    public class CustomerService : ICustomerService
+    {
+        private readonly ApplicationDbContext _context;
+
+        public CustomerService(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public Customer GetCustomerById(int customerId)
+        {
+            return _context.Customers.FirstOrDefault(c => c.CustomerId == customerId);
+        }
+
+        public Customer GetCustomerByEmail(string email)
+        {
+            return _context.Customers.FirstOrDefault(c => c.Email == email);
+        }
+
+        public Customer GetCustomerByName(string name)
+        {
+            return _context.Customers.FirstOrDefault(c => c.Name == name);
+        }
+
+        public void UpdateCustomer(int customerId, string name, string email, string contactInfo)
+        {
+            var customer = GetCustomerById(customerId);
+            if (customer != null)
+            {
+                customer.Name = name;
+                customer.Email = email;
+                customer.ContactInfo = contactInfo;
+            }
+        }
+
+        public void SaveChanges()
+        {
+            _context.SaveChanges();
+        }
+    }
+}

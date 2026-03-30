@@ -1,0 +1,261 @@
+﻿using Bank_Application.Data;
+using Bank_Application.Models;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Bank_Application.Controllers
+{
+    public class TransactionController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        public TransactionController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        // Helper method to check if user is logged in as Customer
+        private bool IsCustomerLoggedIn()
+        {
+            return HttpContext.Session.GetString("role") == "Customer" &&
+                   HttpContext.Session.GetInt32("userId") != null;
+        }
+
+        // Helper method to get current customer ID
+        private int? GetCurrentCustomerId()
+        {
+            return HttpContext.Session.GetInt32("userId");
+        }
+
+        // GET: Transaction/Deposit
+        public IActionResult Deposit()
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Get customer's accounts
+            var accounts = _context.Accounts
+                .Where(a => a.CustomerId == customerId)
+                .ToList();
+
+            if (accounts.Count == 0)
+            {
+                ViewBag.Error = "You have no accounts. Please create an account first.";
+                return View();
+            }
+
+            return View(accounts);
+        }
+
+        // POST: Transaction/Deposit
+        [HttpPost]
+        public IActionResult Deposit(int accountId, decimal amount)
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Validate amount
+            if (amount <= 0)
+            {
+                ViewBag.Error = "Deposit amount must be greater than 0.";
+                var accounts = _context.Accounts
+                    .Where(a => a.CustomerId == customerId)
+                    .ToList();
+                return View(accounts);
+            }
+
+            // Get account
+            var account = _context.Accounts
+                .FirstOrDefault(a => a.AccountId == accountId && a.CustomerId == customerId);
+
+            if (account == null)
+            {
+                ViewBag.Error = "Account not found.";
+                var accounts = _context.Accounts
+                    .Where(a => a.CustomerId == customerId)
+                    .ToList();
+                return View(accounts);
+            }
+
+            // Add amount to balance
+            account.Balance += amount;
+
+            // Create transaction record
+            var transaction = new Transaction
+            {
+                AccountId = accountId,
+                TransactionType = "DEPOSIT",
+                Amount = amount,
+                TransactionDate = DateTime.Now
+            };
+
+            _context.Transactions.Add(transaction);
+            _context.SaveChanges();
+
+            // Create audit log
+            var auditLog = new AuditLog
+            {
+                TransactionId = transaction.TransactionId,
+                ActionPerformed = "DEPOSIT",
+                PerformedBy = "Customer",
+                LogDate = DateTime.Now
+            };
+
+            _context.AuditLogs.Add(auditLog);
+            _context.SaveChanges();
+
+            ViewBag.Success = $"Deposit of {amount:C} successful! New balance: {account.Balance:C}";
+            return RedirectToAction("Dashboard", "Customer");
+        }
+
+        // GET: Transaction/Withdraw
+        public IActionResult Withdraw()
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Get customer's accounts
+            var accounts = _context.Accounts
+                .Where(a => a.CustomerId == customerId)
+                .ToList();
+
+            if (accounts.Count == 0)
+            {
+                ViewBag.Error = "You have no accounts. Please create an account first.";
+                return View();
+            }
+
+            return View(accounts);
+        }
+
+        // POST: Transaction/Withdraw
+        [HttpPost]
+        public IActionResult Withdraw(int accountId, decimal amount)
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Validate amount
+            if (amount <= 0)
+            {
+                ViewBag.Error = "Withdrawal amount must be greater than 0.";
+                var accounts = _context.Accounts
+                    .Where(a => a.CustomerId == customerId)
+                    .ToList();
+                return View(accounts);
+            }
+
+            // Get account
+            var account = _context.Accounts
+                .FirstOrDefault(a => a.AccountId == accountId && a.CustomerId == customerId);
+
+            if (account == null)
+            {
+                ViewBag.Error = "Account not found.";
+                var accounts = _context.Accounts
+                    .Where(a => a.CustomerId == customerId)
+                    .ToList();
+                return View(accounts);
+            }
+
+            // Check if sufficient balance
+            if (account.Balance < amount)
+            {
+                ViewBag.Error = $"Insufficient balance. Current balance: {account.Balance:C}";
+                var accounts = _context.Accounts
+                    .Where(a => a.CustomerId == customerId)
+                    .ToList();
+                return View(accounts);
+            }
+
+            // Deduct amount from balance
+            account.Balance -= amount;
+
+            // Create transaction record
+            var transaction = new Transaction
+            {
+                AccountId = accountId,
+                TransactionType = "WITHDRAWAL",
+                Amount = amount,
+                TransactionDate = DateTime.Now
+            };
+
+            _context.Transactions.Add(transaction);
+            _context.SaveChanges();
+
+            ViewBag.Success = $"Withdrawal of {amount:C} successful! New balance: {account.Balance:C}";
+            return RedirectToAction("Dashboard", "Customer");
+        }
+
+        // GET: Transaction/ViewTransactions
+        public IActionResult ViewTransactions(int accountId = 0)
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Get customer's accounts
+            var accounts = _context.Accounts
+                .Where(a => a.CustomerId == customerId)
+                .ToList();
+
+            if (accounts.Count == 0)
+            {
+                ViewBag.Error = "You have no accounts.";
+                return View(new List<Transaction>());
+            }
+
+            // If no account ID specified, use first account
+            if (accountId == 0 && accounts.Count > 0)
+            {
+                accountId = accounts[0].AccountId;
+            }
+
+            // Verify account belongs to customer
+            var selectedAccount = accounts.FirstOrDefault(a => a.AccountId == accountId);
+            if (selectedAccount == null)
+            {
+                ViewBag.Error = "Account not found.";
+                return View(new List<Transaction>());
+            }
+
+            // Get transactions for selected account
+            var transactions = _context.Transactions
+                .Where(t => t.AccountId == accountId)
+                .OrderByDescending(t => t.TransactionDate)
+                .ToList();
+
+            // Pass data to view
+            ViewBag.Accounts = accounts;
+            ViewBag.SelectedAccountId = accountId;
+            ViewBag.SelectedAccountType = selectedAccount.AccountType;
+            ViewBag.SelectedAccountBalance = selectedAccount.Balance;
+            ViewBag.TransactionCount = transactions.Count;
+
+            return View(transactions);
+        }
+    }
+}

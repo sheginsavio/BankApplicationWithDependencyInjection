@@ -1,0 +1,147 @@
+﻿using Bank_Application.Data;
+using Bank_Application.Models;
+using Bank_Application.Services.Interfaces;
+
+namespace Bank_Application.Services.Implementations
+{
+    public class TransactionService : ITransactionService
+    {
+        private readonly ApplicationDbContext _context;
+
+        public TransactionService(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public void Deposit(int accountId, decimal amount)
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than 0");
+
+            var account = _context.Accounts.FirstOrDefault(a => a.AccountId == accountId);
+            if (account == null)
+                throw new ArgumentException("Account not found");
+
+            // Add amount to balance
+            account.Balance += amount;
+
+            // Create transaction record
+            var transaction = new Transaction
+            {
+                AccountId = accountId,
+                TransactionType = "DEPOSIT",
+                Amount = amount,
+                TransactionDate = DateTime.Now
+            };
+
+            _context.Transactions.Add(transaction);
+            _context.SaveChanges();
+
+            // Create audit log
+            CreateAuditLog(transaction.TransactionId, "DEPOSIT", "Customer");
+        }
+
+        public void Withdraw(int accountId, decimal amount)
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than 0");
+
+            var account = _context.Accounts.FirstOrDefault(a => a.AccountId == accountId);
+            if (account == null)
+                throw new ArgumentException("Account not found");
+
+            if (account.Balance < amount)
+                throw new ArgumentException($"Insufficient balance. Current balance: {account.Balance:C}");
+
+            // Deduct amount from balance
+            account.Balance -= amount;
+
+            // Create transaction record
+            var transaction = new Transaction
+            {
+                AccountId = accountId,
+                TransactionType = "WITHDRAWAL",
+                Amount = amount,
+                TransactionDate = DateTime.Now
+            };
+
+            _context.Transactions.Add(transaction);
+            _context.SaveChanges();
+
+            // Create audit log
+            CreateAuditLog(transaction.TransactionId, "WITHDRAWAL", "Customer");
+        }
+
+        public void Transfer(int fromAccountId, int toAccountId, decimal amount)
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than 0");
+
+            if (fromAccountId == toAccountId)
+                throw new ArgumentException("Cannot transfer to the same account");
+
+            var fromAccount = _context.Accounts.FirstOrDefault(a => a.AccountId == fromAccountId);
+            var toAccount = _context.Accounts.FirstOrDefault(a => a.AccountId == toAccountId);
+
+            if (fromAccount == null)
+                throw new ArgumentException("From account not found");
+
+            if (toAccount == null)
+                throw new ArgumentException("To account not found");
+
+            if (fromAccount.Balance < amount)
+                throw new ArgumentException($"Insufficient balance. Current balance: {fromAccount.Balance:C}");
+
+            // Process transfer
+            fromAccount.Balance -= amount;
+            toAccount.Balance += amount;
+
+            // Create debit transaction (TRANSFER_OUT)
+            var debitTransaction = new Transaction
+            {
+                AccountId = fromAccountId,
+                TransactionType = "TRANSFER_OUT",
+                Amount = amount,
+                TransactionDate = DateTime.Now
+            };
+
+            // Create credit transaction (TRANSFER_IN)
+            var creditTransaction = new Transaction
+            {
+                AccountId = toAccountId,
+                TransactionType = "TRANSFER_IN",
+                Amount = amount,
+                TransactionDate = DateTime.Now
+            };
+
+            _context.Transactions.Add(debitTransaction);
+            _context.Transactions.Add(creditTransaction);
+            _context.SaveChanges();
+
+            // Create audit log
+            CreateAuditLog(null, "TRANSFER", "Customer");
+        }
+
+        public List<Transaction> GetTransactionsByAccountId(int accountId)
+        {
+            return _context.Transactions
+                .Where(t => t.AccountId == accountId)
+                .OrderByDescending(t => t.TransactionDate)
+                .ToList();
+        }
+
+        public void CreateAuditLog(int? transactionId, string actionPerformed, string performedBy)
+        {
+            var auditLog = new AuditLog
+            {
+                TransactionId = transactionId,
+                ActionPerformed = actionPerformed,
+                PerformedBy = performedBy,
+                LogDate = DateTime.Now
+            };
+
+            _context.AuditLogs.Add(auditLog);
+            _context.SaveChanges();
+        }
+    }
+}

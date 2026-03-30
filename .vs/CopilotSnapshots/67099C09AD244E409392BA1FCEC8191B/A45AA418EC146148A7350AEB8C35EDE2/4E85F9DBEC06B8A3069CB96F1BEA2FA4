@@ -1,0 +1,273 @@
+﻿using Bank_Application.Data;
+using Bank_Application.Models;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Bank_Application.Controllers
+{
+    public class RepaymentController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        public RepaymentController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        // Helper method to check if user is logged in as Customer
+        private bool IsCustomerLoggedIn()
+        {
+            return HttpContext.Session.GetString("role") == "Customer" &&
+                   HttpContext.Session.GetInt32("userId") != null;
+        }
+
+        // Helper method to get current customer ID
+        private int? GetCurrentCustomerId()
+        {
+            return HttpContext.Session.GetInt32("userId");
+        }
+
+        // Helper method to calculate total amount payable for a loan
+        private decimal CalculateTotalAmount(Loan loan)
+        {
+            // Total Amount = Loan Amount + (Loan Amount * Interest Rate / 100)
+            return loan.LoanAmount + (loan.LoanAmount * loan.InterestRate / 100);
+        }
+
+        // Helper method to get total paid for a loan
+        private decimal GetTotalPaid(int loanId)
+        {
+            return _context.Repayments
+                .Where(r => r.LoanId == loanId)
+                .Sum(r => r.AmountPaid);
+        }
+
+        // GET: Repayment/MakeRepayment
+        public IActionResult MakeRepayment()
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Get approved loans for this customer
+            var approvedLoans = _context.Loans
+                .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                .ToList();
+
+            if (approvedLoans.Count == 0)
+            {
+                ViewBag.Error = "You have no approved loans. Apply for a loan first.";
+                return View();
+            }
+
+            // Pass loans directly to view
+            return View(approvedLoans);
+        }
+
+        // POST: Repayment/MakeRepayment
+        [HttpPost]
+        public IActionResult MakeRepayment(int loanId, decimal amountPaid)
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            try
+            {
+                // Validate amount first
+                if (amountPaid <= 0)
+                {
+                    ViewBag.Error = "Repayment amount must be greater than 0.";
+                    var approvedLoans = _context.Loans
+                        .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                        .ToList();
+                    return View(approvedLoans);
+                }
+
+                // Get customer's account
+                var account = _context.Accounts
+                    .FirstOrDefault(a => a.CustomerId == customerId);
+
+                if (account == null)
+                {
+                    ViewBag.Error = "You don't have an account. Please create an account first.";
+                    var approvedLoans = _context.Loans
+                        .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                        .ToList();
+                    return View(approvedLoans);
+                }
+
+                // Check if account balance is sufficient
+                if (account.Balance < amountPaid)
+                {
+                    ViewBag.Error = $"Insufficient account balance. Your balance: {account.Balance:C}, Required: {amountPaid:C}";
+                    var approvedLoans = _context.Loans
+                        .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                        .ToList();
+                    return View(approvedLoans);
+                }
+
+                // Get loan with null check
+                var loan = _context.Loans.FirstOrDefault(l => l.LoanId == loanId && l.CustomerId == customerId);
+
+                if (loan == null)
+                {
+                    ViewBag.Error = "Loan not found or you don't have permission to access it.";
+                    var approvedLoans = _context.Loans
+                        .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                        .ToList();
+                    return View(approvedLoans);
+                }
+
+                // Check if loan is already completed
+                if (loan.LoanStatus == "COMPLETED")
+                {
+                    ViewBag.Error = "This loan has already been fully repaid.";
+                    var approvedLoans = _context.Loans
+                        .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                        .ToList();
+                    return View(approvedLoans);
+                }
+
+                // Calculate total amount payable (with interest)
+                // totalAmount = LoanAmount + (LoanAmount * InterestRate / 100)
+                decimal totalAmount = loan.LoanAmount + (loan.LoanAmount * loan.InterestRate / 100);
+
+                // Get total already paid
+                decimal totalPaid = GetTotalPaid(loanId);
+
+                // Calculate remaining balance before this repayment
+                decimal remainingBalance = totalAmount - totalPaid;
+
+                // Validate repayment amount against remaining balance
+                if (amountPaid > remainingBalance)
+                {
+                    ViewBag.Error = $"Repayment amount cannot exceed remaining balance of {remainingBalance:C}. Total amount payable: {totalAmount:C}, Already paid: {totalPaid:C}";
+                    var approvedLoans = _context.Loans
+                        .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                        .ToList();
+                    return View(approvedLoans);
+                }
+
+                // Deduct amount from account balance
+                account.Balance -= amountPaid;
+
+                // Calculate new remaining loan balance after this repayment
+                decimal newRemainingBalance = remainingBalance - amountPaid;
+
+                // Create repayment record with all required fields
+                var repayment = new Repayment
+                {
+                    LoanId = loanId,
+                    AmountPaid = amountPaid,
+                    RepaymentDate = DateTime.Now,
+                    BalanceRemaining = newRemainingBalance
+                };
+
+                // Add repayment to context
+                _context.Repayments.Add(repayment);
+
+                // Update loan status if fully repaid
+                if (newRemainingBalance <= 0)
+                {
+                    loan.LoanStatus = "COMPLETED";
+                }
+
+                // Save account update, repayment, and loan status
+                _context.SaveChanges();
+
+                // Create audit log for repayment (without TransactionId)
+                var auditLog = new AuditLog
+                {
+                    TransactionId = 0,
+                    ActionPerformed = "LOAN_REPAYMENT",
+                    PerformedBy = "Customer",
+                    LogDate = DateTime.Now
+                };
+
+                _context.AuditLogs.Add(auditLog);
+                _context.SaveChanges();
+
+                ViewBag.Success = $"Repayment of {amountPaid:C} successful! New account balance: {account.Balance:C}. Loan remaining: {newRemainingBalance:C}";
+            }
+            catch (Exception ex)
+            {
+                ViewBag.Error = $"Error processing repayment: {ex.Message}";
+                var approvedLoans = _context.Loans
+                    .Where(l => l.CustomerId == customerId && l.LoanStatus == "APPROVED")
+                    .ToList();
+                return View(approvedLoans);
+            }
+
+            return RedirectToAction("MakeRepayment");
+        }
+
+        // GET: Repayment/RepaymentHistory
+        public IActionResult RepaymentHistory(int loanId = 0)
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Get customer's loans
+            var customerLoans = _context.Loans
+                .Where(l => l.CustomerId == customerId && (l.LoanStatus == "APPROVED" || l.LoanStatus == "COMPLETED"))
+                .ToList();
+
+            if (customerLoans.Count == 0)
+            {
+                ViewBag.Error = "You have no loans to view repayment history.";
+                return View(new List<Repayment>());
+            }
+
+            // If no loan ID specified, use first loan
+            if (loanId == 0 && customerLoans.Count > 0)
+            {
+                loanId = customerLoans[0].LoanId;
+            }
+
+            // Verify loan belongs to customer
+            var selectedLoan = customerLoans.FirstOrDefault(l => l.LoanId == loanId);
+            if (selectedLoan == null)
+            {
+                ViewBag.Error = "Loan not found or you don't have permission to access it.";
+                return View(new List<Repayment>());
+            }
+
+            // Get repayments for selected loan
+            var repayments = _context.Repayments
+                .Where(r => r.LoanId == loanId)
+                .OrderBy(r => r.RepaymentDate)
+                .ToList();
+
+            // Calculate loan details
+            decimal totalAmount = CalculateTotalAmount(selectedLoan);
+            decimal totalPaid = GetTotalPaid(loanId);
+            decimal balanceRemaining = totalAmount - totalPaid;
+
+            // Pass data to view
+            ViewBag.Loans = customerLoans;
+            ViewBag.SelectedLoanId = loanId;
+            ViewBag.SelectedLoanAmount = selectedLoan.LoanAmount;
+            ViewBag.InterestRate = selectedLoan.InterestRate;
+            ViewBag.LoanStatus = selectedLoan.LoanStatus;
+            ViewBag.TotalAmount = totalAmount;
+            ViewBag.TotalPaid = totalPaid;
+            ViewBag.BalanceRemaining = balanceRemaining;
+            ViewBag.RepaymentCount = repayments.Count;
+
+            return View(repayments);
+        }
+    }
+}

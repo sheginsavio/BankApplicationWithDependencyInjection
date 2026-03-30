@@ -1,0 +1,20 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace Bank_Application.Models
+{
+    public class AuditLog
+    {
+        [Key]
+        public int LogId { get; set; }
+
+        // Make TransactionId nullable - not all audit logs are linked to transactions
+        public int? TransactionId { get; set; }
+
+        public DateTime LogDate { get; set; }
+        public string ActionPerformed { get; set; }
+        public string PerformedBy { get; set; }
+
+        // Foreign key reference (can be null)
+        public Transaction Transaction { get; set; }
+    }
+}

@@ -1,0 +1,147 @@
+﻿@{
+    ViewData["Title"] = "Make Loan Repayment";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Make Loan Repayment</h4>
+                </div>
+                <div class="card-body p-4">
+                    @if (ViewBag.Error != null)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @ViewBag.Error
+                        </div>
+                    }
+
+                    @if (ViewBag.Success != null)
+                    {
+                        <div class="alert alert-success" role="alert">
+                            @ViewBag.Success
+                        </div>
+                    }
+
+                    @if (Model != null && Model.Count > 0)
+                    {
+                        <form method="post" action="/Repayment/MakeRepayment" id="repaymentForm">
+                            <div class="mb-3">
+                                <label for="loanId" class="form-label">Select Loan</label>
+                                <select class="form-select" id="loanId" name="loanId" required onchange="updateLoanDetails()">
+                                    <option value="">-- Select a Loan --</option>
+                                    @foreach (var loanDetail in Model)
+                                    {
+                                        // Calculate total amount with interest
+                                        decimal totalAmount = loanDetail.LoanAmount + (loanDetail.LoanAmount * loanDetail.InterestRate / 100);
+
+                                        <option value="@loanDetail.LoanId" 
+                                                data-amount="@loanDetail.LoanAmount"
+                                                data-rate="@loanDetail.InterestRate"
+                                                data-total="@totalAmount"
+                                                data-balance="@totalAmount">
+                                            Loan #@loanDetail.LoanId - Amount: @loanDetail.LoanAmount.ToString("C") - Remaining: @totalAmount.ToString("C")
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+
+                            <!-- Loan Details Display -->
+                            <div class="row mb-3" id="loanDetailsDiv" style="display:none;">
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <small class="text-muted">Loan Amount</small>
+                                            <h5 id="loanAmount">-</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <small class="text-muted">Interest Rate</small>
+                                            <h5 id="interestRate">-</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <small class="text-muted">Total Payable</small>
+                                            <h5 id="totalAmount">-</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <small class="text-muted">Balance Remaining</small>
+                                            <h5 id="balanceRemaining" class="text-danger">-</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="amountPaid" class="form-label">Repayment Amount</label>
+                                <input type="number" class="form-control" id="amountPaid" name="amountPaid" placeholder="Enter repayment amount" step="0.01" min="0.01" required>
+                                <small class="form-text text-muted" id="amountHelper">Select a loan to see maximum amount</small>
+                            </div>
+
+                            <div class="alert alert-warning" role="alert">
+                                <strong>Important:</strong>
+                                <ul class="mb-0">
+                                    <li>Repayment amount must be greater than 0</li>
+                                    <li>Cannot pay more than the remaining balance</li>
+                                    <li>Once fully repaid, loan will be marked as COMPLETED</li>
+                                </ul>
+                            </div>
+
+                            <button type="submit" class="btn btn-success w-100">Make Repayment</button>
+                        </form>
+                    }
+
+                    <hr>
+
+                    <p class="text-center">
+                        <a href="/Loan/ViewLoans">View All Loans</a> | 
+                        <a href="/Repayment/RepaymentHistory">View Repayment History</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function updateLoanDetails() {
+        const select = document.getElementById('loanId');
+        const selectedOption = select.options[select.selectedIndex];
+        
+        if (selectedOption.value) {
+            const loanAmount = selectedOption.getAttribute('data-amount');
+            const interestRate = selectedOption.getAttribute('data-rate');
+            const totalAmount = selectedOption.getAttribute('data-total');
+            const totalPaid = selectedOption.getAttribute('data-paid');
+            const balanceRemaining = selectedOption.getAttribute('data-balance');
+
+            // Update display
+            document.getElementById('loanAmount').textContent = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(loanAmount);
+            document.getElementById('interestRate').textContent = interestRate + '%';
+            document.getElementById('totalAmount').textContent = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalAmount);
+            document.getElementById('balanceRemaining').textContent = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceRemaining);
+            
+            // Show loan details
+            document.getElementById('loanDetailsDiv').style.display = 'flex';
+
+            // Update helper text
+            document.getElementById('amountHelper').textContent = 'Maximum amount you can pay: ' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(balanceRemaining);
+            
+            // Set max amount for input
+            document.getElementById('amountPaid').max = balanceRemaining;
+        } else {
+            document.getElementById('loanDetailsDiv').style.display = 'none';
+        }
+    }
+</script>

@@ -1,0 +1,195 @@
+@model List<Repayment>
+
+@{
+    ViewData["Title"] = "Repayment History";
+}
+
+<div class="container mt-5">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2>Loan Repayment History</h2>
+        </div>
+    </div>
+
+    <!-- Loan Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Loan Amount</h5>
+                    <h3>@ViewBag.SelectedLoanAmount.ToString("C")</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">Interest Rate</h5>
+                    <h3>@ViewBag.InterestRate%</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">Total Payable</h5>
+                    <h3>@ViewBag.TotalAmount.ToString("C")</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">Loan Status</h5>
+                    @if (ViewBag.LoanStatus == "COMPLETED")
+                    {
+                        <span class="badge bg-success">@ViewBag.LoanStatus</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-warning text-dark">@ViewBag.LoanStatus</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Repayment Progress -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Repayment Progress</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <p><strong>Total Paid:</strong> <span class="text-success">@ViewBag.TotalPaid.ToString("C")</span></p>
+                        </div>
+                        <div class="col-md-4">
+                            <p><strong>Balance Remaining:</strong> <span class="text-danger">@ViewBag.BalanceRemaining.ToString("C")</span></p>
+                        </div>
+                        <div class="col-md-4">
+                            <p><strong>Paid Progress:</strong> 
+                                @{
+                                    var progressPercent = ViewBag.TotalAmount > 0 ? (ViewBag.TotalPaid / ViewBag.TotalAmount) * 100 : 0;
+                                }
+                                <span class="badge bg-info">@((decimal)progressPercent).ToString("F1")%</span>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: @progressPercent%" aria-valuenow="@progressPercent" aria-valuemin="0" aria-valuemax="100">
+                            @((decimal)progressPercent).ToString("F1")% Paid
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loan Switcher -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Switch Loan</h5>
+                </div>
+                <div class="card-body">
+                    @if (ViewBag.Loans != null && ViewBag.Loans.Count > 0)
+                    {
+                        <div class="btn-group" role="group">
+                            @foreach (var loan in ViewBag.Loans)
+                            {
+                                var isActive = loan.LoanId == ViewBag.SelectedLoanId;
+                                <a href="/Repayment/RepaymentHistory?loanId=@loan.LoanId" 
+                                   class="btn @(isActive ? "btn-primary" : "btn-outline-primary")">
+                                    Loan #@loan.LoanId (@loan.LoanAmount.ToString("C"))
+                                </a>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Repayments Table -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Repayment Transactions (@ViewBag.RepaymentCount)</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Count > 0)
+                    {
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Repayment ID</th>
+                                    <th>Amount Paid</th>
+                                    <th>Repayment Date</th>
+                                    <th>Balance Remaining</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var repayment in Model)
+                                {
+                                    <tr>
+                                        <td>@repayment.RepaymentId</td>
+                                        <td class="text-success">
+                                            <strong>@repayment.AmountPaid.ToString("C")</strong>
+                                        </td>
+                                        <td>@repayment.RepaymentDate.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td class="text-danger">
+                                            <strong>@repayment.BalanceRemaining.ToString("C")</strong>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info" role="alert">
+                            No repayments made yet for this loan. <a href="/Repayment/MakeRepayment">Make a repayment</a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculation Details -->
+    <div class="row mt-4 mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Calculation Details</h5>
+                </div>
+                <div class="card-body">
+                    <p>
+                        <strong>Formula:</strong><br>
+                        Total Payable = Loan Amount + (Loan Amount × Interest Rate ÷ 100)<br>
+                        <br>
+                        <strong>In your case:</strong><br>
+                        Total Payable = @ViewBag.SelectedLoanAmount.ToString("C") + (@ViewBag.SelectedLoanAmount.ToString("C") × @ViewBag.InterestRate% ÷ 100)<br>
+                        Total Payable = <strong>@ViewBag.TotalAmount.ToString("C")</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <a href="/Repayment/MakeRepayment" class="btn btn-success">Make Repayment</a>
+            <a href="/Loan/ViewLoans" class="btn btn-primary">View All Loans</a>
+            <a href="/Customer/Dashboard" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+    </div>
+</div>

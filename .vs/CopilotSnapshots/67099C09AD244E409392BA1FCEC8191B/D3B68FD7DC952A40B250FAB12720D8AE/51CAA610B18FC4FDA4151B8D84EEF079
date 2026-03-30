@@ -1,0 +1,110 @@
+﻿@model List<Account>
+
+@{
+    ViewData["Title"] = "Customer Dashboard";
+}
+
+<div class="container mt-5">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2>Welcome, @ViewBag.CustomerName!</h2>
+            <p class="text-muted">Email: @ViewBag.Email</p>
+        </div>
+    </div>
+
+    <!-- Customer Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Total Balance</h5>
+                    <h3>@ViewBag.TotalBalance.ToString("C")</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">Total Accounts</h5>
+                    <h3>@ViewBag.AccountCount</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">Contact Info</h5>
+                    <p>@ViewBag.ContactInfo</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-secondary">
+                <div class="card-body">
+                    <h5 class="card-title">Actions</h5>
+                    <div class="btn-group-vertical w-100">
+                        <a href="/Customer/CreateAccount" class="btn btn-light btn-sm mb-1">Create Account</a>
+                        <a href="/Transaction/Deposit" class="btn btn-success btn-sm mb-1">Deposit</a>
+                        <a href="/Transaction/Withdraw" class="btn btn-warning btn-sm mb-1">Withdraw</a>
+                        <a href="/Loan/ApplyLoan" class="btn btn-info btn-sm mb-1">Apply Loan</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounts Table -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Your Accounts</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Count > 0)
+                    {
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Account ID</th>
+                                    <th>Account Type</th>
+                                    <th>Balance</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var account in Model)
+                                {
+                                    <tr>
+                                        <td>@account.AccountId</td>
+                                        <td>
+                                            <span class="badge bg-info">@account.AccountType</span>
+                                        </td>
+                                        <td>@account.Balance.ToString("C")</td>
+                                        <td>
+                                            <a href="/Customer/GetAccountDetails/@account.AccountId" class="btn btn-sm btn-primary">View Details</a>
+                                            <a href="/Transaction/ViewTransactions?accountId=@account.AccountId" class="btn btn-sm btn-info">Transactions</a>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No accounts found. <a href="/Customer/CreateAccount">Create one now</a></p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile and Logout Actions -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <a href="/Loan/ViewLoans" class="btn btn-info">View My Loans</a>
+            <a href="/Customer/UpdateProfile" class="btn btn-warning">Update Profile</a>
+            <a href="/Auth/Logout" class="btn btn-danger">Logout</a>
+        </div>
+    </div>
+</div>
