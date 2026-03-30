@@ -101,10 +101,10 @@ namespace Bank_Application.Services.Implementations
             {
                 _context.SaveChanges();
 
-                // Create audit log without transaction ID
+                // Create audit log without transaction ID (set to null, NOT 0)
                 var auditLog = new AuditLog
                 {
-                    TransactionId = 0,
+                    TransactionId = null,  // ✅ Set to null, NOT 0
                     ActionPerformed = "LOAN_APPROVED",
                     PerformedBy = "LoanApprover",
                     LogDate = DateTime.Now
@@ -129,10 +129,10 @@ namespace Bank_Application.Services.Implementations
             // Save the loan rejection
             _context.SaveChanges();
 
-            // Create audit log for loan rejection
+            // Create audit log for loan rejection (no transaction, so set to null)
             var auditLog = new AuditLog
             {
-                TransactionId = 0,
+                TransactionId = null,  // ✅ Set to null, NOT 0
                 ActionPerformed = "LOAN_REJECTED",
                 PerformedBy = "LoanApprover",
                 LogDate = DateTime.Now

@@ -96,7 +96,6 @@ tmp/
 # Published Web App
 PublishProfiles/
 publish/
-wwwroot/lib/
 wwwroot/node_modules/
 
 # Entity Framework migrations (if using local DB)

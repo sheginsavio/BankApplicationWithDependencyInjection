@@ -183,11 +183,11 @@ namespace Bank_Application.Controllers
                 // Save account update, repayment, and loan status
                 _context.SaveChanges();
 
-                // Create audit log for repayment (without TransactionId)
+                // Create audit log for repayment (without TransactionId - set to null)
                 var auditLog = new AuditLog
                 {
-                    TransactionId = 0,
-                    ActionPerformed = "LOAN_REPAYMENT",
+                    TransactionId = null,  // ✅ NEVER 0, set to null
+                    ActionPerformed = "REPAYMENT",
                     PerformedBy = "Customer",
                     LogDate = DateTime.Now
                 };
