@@ -1,0 +1,285 @@
+using Bank_Application.Data;
+using Bank_Application.Models;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Bank_Application.Controllers
+{
+    public class LoanController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        public LoanController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        // Helper method to check if user is logged in as Customer
+        private bool IsCustomerLoggedIn()
+        {
+            return HttpContext.Session.GetString("role") == "Customer" &&
+                   HttpContext.Session.GetInt32("userId") != null;
+        }
+
+        // Helper method to check if user is logged in as LoanApprover
+        private bool IsLoanApproverLoggedIn()
+        {
+            return HttpContext.Session.GetString("role") == "LoanApprover";
+        }
+
+        // Helper method to get current customer ID
+        private int? GetCurrentCustomerId()
+        {
+            return HttpContext.Session.GetInt32("userId");
+        }
+
+        // GET: Loan/ApplyLoan
+        public IActionResult ApplyLoan()
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            return View();
+        }
+
+        // POST: Loan/ApplyLoan
+        [HttpPost]
+        public IActionResult ApplyLoan(decimal loanAmount)
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            // Validate loan amount
+            if (loanAmount <= 0)
+            {
+                ViewBag.Error = "Loan amount must be greater than 0.";
+                return View();
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Create new loan
+            var newLoan = new Loan
+            {
+                CustomerId = (int)customerId,
+                LoanAmount = loanAmount,
+                InterestRate = 0,
+                LoanStatus = "APPLIED"
+            };
+
+            _context.Loans.Add(newLoan);
+            _context.SaveChanges();
+
+            ViewBag.Success = $"Loan application submitted! Loan Amount: {loanAmount:C}";
+            return RedirectToAction("ViewLoans");
+        }
+
+        // GET: Loan/ViewLoans (Customer)
+        public IActionResult ViewLoans()
+        {
+            // Check if customer is logged in
+            if (!IsCustomerLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            var customerId = GetCurrentCustomerId();
+
+            // Get all loans for this customer
+            var loans = _context.Loans
+                .Where(l => l.CustomerId == customerId)
+                .OrderByDescending(l => l.LoanId)
+                .ToList();
+
+            // Count by status for dashboard
+            ViewBag.TotalLoans = loans.Count;
+            ViewBag.AppliedLoans = loans.Count(l => l.LoanStatus == "APPLIED");
+            ViewBag.ApprovedLoans = loans.Count(l => l.LoanStatus == "APPROVED");
+            ViewBag.RejectedLoans = loans.Count(l => l.LoanStatus == "REJECTED");
+
+            return View(loans);
+        }
+
+        // GET: Loan/PendingLoans (LoanApprover)
+        public IActionResult PendingLoans()
+        {
+            // Check if loan approver is logged in
+            if (!IsLoanApproverLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            // Get all loans with APPLIED status
+            var pendingLoans = _context.Loans
+                .Where(l => l.LoanStatus == "APPLIED")
+                .OrderBy(l => l.LoanId)
+                .ToList();
+
+            // Get customer names for display
+            var customerIds = pendingLoans.Select(l => l.CustomerId).Distinct().ToList();
+            var customers = _context.Customers
+                .Where(c => customerIds.Contains(c.CustomerId))
+                .ToDictionary(c => c.CustomerId);
+
+            // Pass customers to view
+            ViewBag.Customers = customers;
+            ViewBag.PendingCount = pendingLoans.Count;
+
+            return View(pendingLoans);
+        }
+
+        // POST: Loan/ApproveLoan
+        [HttpPost]
+        public IActionResult ApproveLoan(int loanId, decimal interestRate)
+        {
+            // Check if loan approver is logged in
+            if (!IsLoanApproverLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            // Validate interest rate (must be provided and greater than or equal to 0)
+            if (interestRate < 0)
+            {
+                ViewBag.Error = "Interest rate cannot be negative.";
+                return RedirectToAction("PendingLoans");
+            }
+
+            // Get loan
+            var loan = _context.Loans.FirstOrDefault(l => l.LoanId == loanId);
+
+            if (loan == null)
+            {
+                ViewBag.Error = "Loan not found.";
+                return RedirectToAction("PendingLoans");
+            }
+
+            // Set loan status and interest rate
+            loan.LoanStatus = "APPROVED";
+            loan.InterestRate = interestRate;
+
+            // Try to add loan amount to customer's account balance
+            try
+            {
+                // Get customer's account
+                var account = _context.Accounts
+                    .FirstOrDefault(a => a.CustomerId == loan.CustomerId);
+
+                if (account != null)
+                {
+                    // Add loan amount to account balance
+                    account.Balance += loan.LoanAmount;
+
+                    // Create a transaction record for audit
+                    var transaction = new Transaction
+                    {
+                        AccountId = account.AccountId,
+                        TransactionType = "TRANSFER",
+                        Amount = loan.LoanAmount,
+                        TransactionDate = DateTime.Now
+                    };
+
+                    _context.Transactions.Add(transaction);
+
+                    // Save to get transaction ID
+                    _context.SaveChanges();
+
+                    // Now create audit log with the actual transaction ID
+                    var auditLog = new AuditLog
+                    {
+                        TransactionId = transaction.TransactionId,
+                        ActionPerformed = "LOAN_APPROVED",
+                        PerformedBy = "LoanApprover",
+                        LogDate = DateTime.Now
+                    };
+
+                    _context.AuditLogs.Add(auditLog);
+                    _context.SaveChanges();
+                }
+                else
+                {
+                    // No account found, just save the loan approval
+                    _context.SaveChanges();
+
+                    // Create audit log without transaction ID
+                    var auditLog = new AuditLog
+                    {
+                        TransactionId = 0,
+                        ActionPerformed = "LOAN_APPROVED",
+                        PerformedBy = "LoanApprover",
+                        LogDate = DateTime.Now
+                    };
+
+                    _context.AuditLogs.Add(auditLog);
+                    _context.SaveChanges();
+                }
+            }
+            catch (Exception ex)
+            {
+                ViewBag.Error = $"Error approving loan: {ex.Message}";
+                return RedirectToAction("PendingLoans");
+            }
+
+            ViewBag.Success = $"Loan {loanId} approved with {interestRate}% interest rate.";
+            return RedirectToAction("PendingLoans");
+        }
+
+        // POST: Loan/RejectLoan
+        [HttpPost]
+        public IActionResult RejectLoan(int loanId)
+        {
+            // Check if loan approver is logged in
+            if (!IsLoanApproverLoggedIn())
+            {
+                return RedirectToAction("Login", "Auth");
+            }
+
+            // Get loan
+            var loan = _context.Loans.FirstOrDefault(l => l.LoanId == loanId);
+
+            if (loan == null)
+            {
+                ViewBag.Error = "Loan not found.";
+                return RedirectToAction("PendingLoans");
+            }
+
+            try
+            {
+                // Set loan status to rejected
+                loan.LoanStatus = "REJECTED";
+
+                // Set InterestRate to 0 (required field cannot be null)
+                loan.InterestRate = 0;
+
+                // Save the loan rejection first
+                _context.SaveChanges();
+
+                // Create audit log for loan rejection
+                var auditLog = new AuditLog
+                {
+                    TransactionId = 0,
+                    ActionPerformed = "LOAN_REJECTED",
+                    PerformedBy = "LoanApprover",
+                    LogDate = DateTime.Now
+                };
+
+                _context.AuditLogs.Add(auditLog);
+                _context.SaveChanges();
+
+                ViewBag.Success = $"Loan {loanId} has been rejected.";
+            }
+            catch (Exception ex)
+            {
+                ViewBag.Error = $"Error rejecting loan: {ex.Message}";
+                return RedirectToAction("PendingLoans");
+            }
+
+            return RedirectToAction("PendingLoans");
+        }
+    }
+}

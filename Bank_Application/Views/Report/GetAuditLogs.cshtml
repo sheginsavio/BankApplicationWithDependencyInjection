@@ -1,0 +1,129 @@
+@model List<AuditLog>
+
+@{
+    ViewData["Title"] = "Audit Logs";
+}
+
+<div class="container-fluid mt-5">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2>System Audit Logs</h2>
+            <p class="text-muted">Generated on: @DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</p>
+        </div>
+    </div>
+
+    <!-- Audit Log Summary -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title">Total Audit Logs</h5>
+                    <h3>@ViewBag.TotalAuditLogs</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audit Logs Table -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Audit Log Details</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model != null && Model.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Log ID</th>
+                                        <th>Transaction ID</th>
+                                        <th>Action Performed</th>
+                                        <th>Performed By</th>
+                                        <th>Log Date & Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var log in Model)
+                                    {
+                                        <tr>
+                                            <td>@log.LogId</td>
+                                            <td>
+                                                @if (log.TransactionId > 0)
+                                                {
+                                                    <a href="#">@log.TransactionId</a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">-</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (log.ActionPerformed.Contains("DEPOSIT"))
+                                                {
+                                                    <span class="badge bg-success">@log.ActionPerformed</span>
+                                                }
+                                                else if (log.ActionPerformed.Contains("WITHDRAWAL"))
+                                                {
+                                                    <span class="badge bg-danger">@log.ActionPerformed</span>
+                                                }
+                                                else if (log.ActionPerformed.Contains("APPROVED"))
+                                                {
+                                                    <span class="badge bg-success">@log.ActionPerformed</span>
+                                                }
+                                                else if (log.ActionPerformed.Contains("REJECTED"))
+                                                {
+                                                    <span class="badge bg-danger">@log.ActionPerformed</span>
+                                                }
+                                                else if (log.ActionPerformed.Contains("REPAYMENT"))
+                                                {
+                                                    <span class="badge bg-info">@log.ActionPerformed</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">@log.ActionPerformed</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (log.PerformedBy == "Admin")
+                                                {
+                                                    <span class="badge bg-danger">@log.PerformedBy</span>
+                                                }
+                                                else if (log.PerformedBy == "LoanApprover")
+                                                {
+                                                    <span class="badge bg-warning text-dark">@log.PerformedBy</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-info">@log.PerformedBy</span>
+                                                }
+                                            </td>
+                                            <td>@log.LogDate.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info" role="alert">
+                            No audit logs found.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export and Navigation -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <button class="btn btn-primary" onclick="window.print()">Print Report</button>
+            <a href="/Report/GenerateTransactionReport" class="btn btn-info">View Transactions</a>
+            <a href="/Auth/Logout" class="btn btn-danger">Logout</a>
+        </div>
+    </div>
+</div>
